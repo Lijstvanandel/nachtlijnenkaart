@@ -1,23 +1,43 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { Layers, MapPin, Maximize2, Scan } from 'lucide-react';
-import type { BasemapId, ColorMode, NightBusLine, NightBusStop } from '../types/nightBus';
+import { Bus, Layers, MapPin, Maximize2, Scan } from 'lucide-react';
+import type {
+  BasemapId,
+  ColorMode,
+  NightBusLine,
+  NightBusStop,
+  PrivateNightBusLine,
+  PrivateNightBusStop,
+} from '../types/nightBus';
 import {
   CONCESSIEGRENS_DRENTHE_OVERIJSSEL,
   GM1708_STEENWIJKERLAND_OUTLINE,
 } from '../data/nightBusLines';
-import { getPolylineStyle, STATUS_META } from '../utils/nightBusLogic';
+import {
+  getPolylineStyle,
+  getPrivatePolylineStyle,
+  PRIVATE_STATUS_META,
+  STATUS_META,
+} from '../utils/nightBusLogic';
 
 export type MapFocusCommand =
   | { type: 'nl'; nonce: number }
   | { type: 'gm1708'; nonce: number }
   | { type: 'line'; line: NightBusLine; nonce: number }
-  | { type: 'stop'; stop: NightBusStop; line: NightBusLine; nonce: number };
+  | { type: 'stop'; stop: NightBusStop; line: NightBusLine; nonce: number }
+  | { type: 'privateLine'; line: PrivateNightBusLine; nonce: number }
+  | { type: 'privateStop'; stop: PrivateNightBusStop; line: PrivateNightBusLine; nonce: number };
 
 interface NightBusMapProps {
   allLines: NightBusLine[];
   filteredLines: NightBusLine[];
   selectedLine: NightBusLine | null;
+  privateLines: PrivateNightBusLine[];
+  filteredPrivateLines: PrivateNightBusLine[];
+  showPrivateLines: boolean;
+  onTogglePrivateLines: (next: boolean) => void;
+  selectedPrivateLine: PrivateNightBusLine | null;
+  onSelectPrivateLine: (line: PrivateNightBusLine) => void;
   colorMode: ColorMode;
   focusCommand: MapFocusCommand | null;
   onSelectLine: (line: NightBusLine) => void;
@@ -47,6 +67,12 @@ export const NightBusMap: React.FC<NightBusMapProps> = ({
   allLines,
   filteredLines,
   selectedLine,
+  privateLines,
+  filteredPrivateLines,
+  showPrivateLines,
+  onTogglePrivateLines,
+  selectedPrivateLine,
+  onSelectPrivateLine,
   colorMode,
   focusCommand,
   onSelectLine,
@@ -58,10 +84,13 @@ export const NightBusMap: React.FC<NightBusMapProps> = ({
   const tileLayersRef = useRef<Record<BasemapId, L.TileLayer> | null>(null);
   const routesLayerRef = useRef<L.LayerGroup | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const privateLayerRef = useRef<L.LayerGroup | null>(null);
   const boundaryLayerRef = useRef<L.LayerGroup | null>(null);
 
   const onSelectLineRef = useRef(onSelectLine);
   onSelectLineRef.current = onSelectLine;
+  const onSelectPrivateLineRef = useRef(onSelectPrivateLine);
+  onSelectPrivateLineRef.current = onSelectPrivateLine;
 
   const [basemap, setBasemap] = useState<BasemapId>('pdok');
   const [showRoutes, setShowRoutes] = useState(true);
@@ -109,6 +138,7 @@ export const NightBusMap: React.FC<NightBusMapProps> = ({
 
     boundaryLayerRef.current = L.layerGroup().addTo(map);
     routesLayerRef.current = L.layerGroup().addTo(map);
+    privateLayerRef.current = L.layerGroup().addTo(map);
     markersLayerRef.current = L.layerGroup().addTo(map);
 
     map.on('zoomend', () => {
@@ -214,7 +244,10 @@ export const NightBusMap: React.FC<NightBusMapProps> = ({
         const isMatched = filteredSet.has(line.line_id);
         const isSelected = line.line_id === selectedId;
         const style = getPolylineStyle(line, colorMode, !isMatched, isSelected);
-        const latLngs: L.LatLngExpression[] = line.haltes.map((h) => [h.lat, h.lon]);
+        const latLngs: L.LatLngExpression[] =
+          line.routeWaypoints && line.routeWaypoints.length >= 2
+            ? line.routeWaypoints
+            : line.haltes.map((h) => [h.lat, h.lon]);
 
         // Subtiele donkere halo achter geselecteerde lijn voor maximaal contrast
         if (isSelected) {
@@ -352,7 +385,159 @@ export const NightBusMap: React.FC<NightBusMapProps> = ({
     }
   }, [allLines, filteredLines, selectedLine, colorMode, showRoutes, showMarkers, zoomLevel]);
 
-  // Verwerk focuscommando's (GM1708, Nederland, Lijn, Halte)
+  // Losse kaartlaag: Particuliere nachtlijnen (standaard gedeactiveerd)
+  useEffect(() => {
+    const privateLayer = privateLayerRef.current;
+    if (!privateLayer) return;
+
+    privateLayer.clearLayers();
+    if (!showPrivateLines) return;
+
+    const filteredSet = new Set(filteredPrivateLines.map((l) => l.line_id));
+    const selectedId = selectedPrivateLine?.line_id || null;
+
+    const orderedPrivate = [...privateLines].sort((a, b) => {
+      const aSel = a.line_id === selectedId ? 2 : filteredSet.has(a.line_id) ? 1 : 0;
+      const bSel = b.line_id === selectedId ? 2 : filteredSet.has(b.line_id) ? 1 : 0;
+      return aSel - bSel;
+    });
+
+    for (const line of orderedPrivate) {
+      const coords =
+        line.route_waypoints.length >= 2
+          ? line.route_waypoints
+          : line.stops.map((s) => [s.lat, s.lon] as [number, number]);
+      if (coords.length < 2) continue;
+
+      const isMatched = filteredSet.has(line.line_id);
+      const isSelected = line.line_id === selectedId;
+      const style = getPrivatePolylineStyle(line, !isMatched, isSelected);
+      const statusMeta = PRIVATE_STATUS_META[line.status];
+
+      if (isSelected) {
+        L.polyline(coords, {
+          color: '#060e0a',
+          weight: style.weight + 4.5,
+          opacity: 0.9,
+          interactive: false,
+        }).addTo(privateLayer);
+      }
+
+      const polyline = L.polyline(coords, {
+        color: style.color,
+        weight: style.weight,
+        opacity: style.opacity,
+        dashArray: style.dashArray,
+        lineCap: 'round',
+        lineJoin: 'round',
+      });
+
+      const popupHtml = `
+        <div style="padding:12px 14px;min-width:250px;max-width:310px;font-family:Inter,sans-serif;line-height:1.45;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px;padding-right:22px;">
+            <span style="background:#a855f7;color:#060e0a;font-family:JetBrains Mono,monospace;font-weight:800;font-size:10px;padding:2px 6px;border-radius:3px;">PARTICULIER</span>
+            <span style="border:1px solid ${statusMeta.color}66;background:${statusMeta.color}22;color:${statusMeta.color};font-family:JetBrains Mono,monospace;font-weight:700;font-size:10px;padding:1px 5px;border-radius:3px;">${escapeHtml(statusMeta.shortLabel)}</span>
+          </div>
+          <div style="font-weight:700;font-size:13px;color:#f5f6f4;margin-bottom:3px;">${escapeHtml(line.naam_verbinding)}</div>
+          <div style="font-family:JetBrains Mono,monospace;font-size:10px;color:#9bb0a4;margin-bottom:6px;">
+            ${escapeHtml(line.vervoerder)} · ${escapeHtml(line.provincies.join(' / '))}
+          </div>
+          <div style="font-size:11px;color:#d6e2dc;border-top:1px solid #1b3829;padding-top:6px;">
+            <div><strong>Frequentie:</strong> ${escapeHtml(line.frequentie)}</div>
+            <div><strong>Tarief:</strong> ${escapeHtml(line.tarief)}</div>
+            <div><strong>Haltes:</strong> ${line.stops.length} kernen/haltes</div>
+          </div>
+        </div>
+      `;
+
+      polyline.bindPopup(popupHtml);
+      polyline.bindTooltip(
+        `<span style="font-family:JetBrains Mono,monospace;font-size:11px;font-weight:700;color:${statusMeta.color};">PARTICULIER</span> · ${escapeHtml(line.naam_verbinding)}`,
+        { sticky: true }
+      );
+
+      polyline.on('click', () => {
+        onSelectPrivateLineRef.current(line);
+      });
+
+      polyline.on('mouseover', () => {
+        if (!isSelected && isMatched) {
+          polyline.setStyle({ weight: style.weight + 2, opacity: 1 });
+        }
+      });
+
+      polyline.on('mouseout', () => {
+        if (!isSelected && isMatched) {
+          polyline.setStyle({ weight: style.weight, opacity: style.opacity });
+        }
+      });
+
+      polyline.addTo(privateLayer);
+
+      // Halte-/kernmarkers van particuliere lijnen (als gematcht of geselecteerd)
+      if ((isMatched || isSelected) && showMarkers) {
+        line.stops.forEach((stop, idx) => {
+          const isExact = stop.nauwkeurigheid === 'EXACTE_HALTE';
+          const isTerminal = idx === 0 || idx === line.stops.length - 1;
+          const marker = L.circleMarker([stop.lat, stop.lon], {
+            radius: isSelected ? (isExact ? 6.5 : 5.2) : isExact ? 5.2 : isTerminal ? 4.4 : 3.6,
+            color: isExact ? '#fbbf24' : '#060e0a',
+            weight: isExact ? 2 : 1.4,
+            fillColor: isSelected ? '#fbbf24' : statusMeta.color,
+            fillOpacity: 0.95,
+          });
+
+          const timeSummary = [
+            stop.tijd_heen ? `Heen ${stop.tijd_heen}` : null,
+            stop.tijd_terug ? `Terug ${stop.tijd_terug}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ');
+
+          marker.bindPopup(`
+            <div style="padding:11px 13px;min-width:220px;font-family:Inter,sans-serif;line-height:1.45;">
+              <div style="font-family:JetBrains Mono,monospace;font-size:10px;color:${isExact ? '#fbbf24' : statusMeta.color};font-weight:700;padding-right:22px;">
+                #${stop.volgnr} · ${escapeHtml(stop.nauwkeurigheid)}
+              </div>
+              <div style="font-weight:700;font-size:13px;color:#f5f6f4;margin:3px 0;">
+                ${escapeHtml(stop.haltenaam)}
+              </div>
+              <div style="font-family:JetBrains Mono,monospace;font-size:10px;color:#9bb0a4;">
+                ${escapeHtml(stop.woonplaats)} (${escapeHtml(stop.gemeente)})<br/>
+                ${stop.lat.toFixed(4)}, ${stop.lon.toFixed(4)}
+                ${timeSummary ? `<br/><span style="color:#fbbf24;">${escapeHtml(timeSummary)}</span>` : ''}
+              </div>
+            </div>
+          `);
+
+          marker.bindTooltip(
+            `<span style="font-family:JetBrains Mono,monospace;font-size:10px;">${escapeHtml(stop.haltenaam)} (${isExact ? 'EXACT' : 'KERN'})</span>`,
+            { direction: 'top' }
+          );
+
+          marker.on('click', () => {
+            onSelectPrivateLineRef.current(line);
+          });
+
+          marker.addTo(privateLayer);
+        });
+
+        if (isSelected && line.stops.length > 0) {
+          const anchor = line.stops[line.stops.length - 1];
+          L.marker([anchor.lat, anchor.lon], {
+            interactive: false,
+            icon: L.divIcon({
+              className: 'forensic-pin',
+              html: `<span style="background:#a855f7;color:#060e0a;padding:2px 7px;border-radius:3px;font-weight:800;display:inline-block;white-space:nowrap;transform:translateX(-50%);box-shadow:0 2px 8px rgba(0,0,0,0.6);">Particulier · ${escapeHtml(line.naam_verbinding)}</span>`,
+              iconAnchor: [0, -8],
+            }),
+          }).addTo(privateLayer);
+        }
+      }
+    }
+  }, [privateLines, filteredPrivateLines, showPrivateLines, selectedPrivateLine, showMarkers]);
+
+  // Verwerk focuscommando's (GM1708, Nederland, Lijn, Halte, Particuliere lijn/halte)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !focusCommand) return;
@@ -363,19 +548,40 @@ export const NightBusMap: React.FC<NightBusMapProps> = ({
       map.flyToBounds(GM1708_BOUNDS, { padding: [28, 28], duration: 0.75, maxZoom: 11 });
     } else if (focusCommand.type === 'line') {
       const stops = focusCommand.line.haltes;
-      if (stops.length >= 2) {
-        const bounds = L.latLngBounds(stops.map((s) => [s.lat, s.lon] as [number, number]));
+      const pts: [number, number][] =
+        focusCommand.line.routeWaypoints && focusCommand.line.routeWaypoints.length >= 2
+          ? focusCommand.line.routeWaypoints
+          : stops.map((s) => [s.lat, s.lon] as [number, number]);
+      if (pts.length >= 2) {
+        const bounds = L.latLngBounds(pts);
         map.flyToBounds(bounds, { padding: [46, 46], duration: 0.65, maxZoom: 12 });
-      } else if (stops.length === 1) {
-        map.flyTo([stops[0].lat, stops[0].lon], 12, { duration: 0.65 });
+      } else if (pts.length === 1) {
+        map.flyTo(pts[0], 12, { duration: 0.65 });
       }
     } else if (focusCommand.type === 'stop') {
+      map.flyTo([focusCommand.stop.lat, focusCommand.stop.lon], 13, { duration: 0.55 });
+    } else if (focusCommand.type === 'privateLine') {
+      const pts =
+        focusCommand.line.route_waypoints.length >= 2
+          ? focusCommand.line.route_waypoints
+          : focusCommand.line.stops.map((s) => [s.lat, s.lon] as [number, number]);
+      if (pts.length >= 2) {
+        const bounds = L.latLngBounds(pts);
+        map.flyToBounds(bounds, { padding: [46, 46], duration: 0.65, maxZoom: 12 });
+      } else if (pts.length === 1) {
+        map.flyTo(pts[0], 12, { duration: 0.65 });
+      }
+    } else if (focusCommand.type === 'privateStop') {
       map.flyTo([focusCommand.stop.lat, focusCommand.stop.lon], 13, { duration: 0.55 });
     }
   }, [focusCommand]);
 
   return (
-    <div id="mapViewContainer" className="w-full h-full relative">
+    <div
+      id="mapViewContainer"
+      data-private-layer={showPrivateLines ? 'on' : 'off'}
+      className="w-full h-full relative"
+    >
       <div ref={containerRef} id="map" className="w-full h-full z-10" />
 
       {/* Bovenste zwevende kaartbalk: links snelacties, rechts basiskaart & lagen (nooit overlappend) */}
@@ -470,6 +676,21 @@ export const NightBusMap: React.FC<NightBusMapProps> = ({
                 className="accent-[#f59e0b]"
               />
             </label>
+            <div className="pt-1.5 mt-1 border-t border-[var(--border-subtle)]">
+              <label className="flex items-center justify-between gap-3 cursor-pointer text-[var(--text-main)]">
+                <span className="flex items-center gap-1.5">
+                  <Bus className="w-3.5 h-3.5 text-[#a855f7]" />
+                  <span>Particuliere nachtlijnen ({privateLines.length})</span>
+                </span>
+                <input
+                  id="layerPrivateLinesToggle"
+                  type="checkbox"
+                  checked={showPrivateLines}
+                  onChange={(e) => onTogglePrivateLines(e.target.checked)}
+                  className="accent-[#a855f7]"
+                />
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -546,6 +767,30 @@ export const NightBusMap: React.FC<NightBusMapProps> = ({
             <div className="flex items-center gap-2">
               <span className="w-5 h-0.5 bg-[#60756a] shrink-0" />
               <span className="text-[var(--text-muted)]">Niet gespecificeerd</span>
+            </div>
+          </div>
+        )}
+
+        {showPrivateLines && (
+          <div className="mt-2 pt-2 border-t border-[var(--border-subtle)] space-y-1 text-[11px]">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-[#c084fc] flex items-center justify-between">
+              <span>Particuliere nachtlijnen</span>
+              <span>27 NOV</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-5 h-0.5 bg-[#a855f7] shrink-0" />
+              <span className="text-[var(--text-main)]">Particulier actief (regulier)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-5 border-t-2 border-dashed border-[#22d3ee] shrink-0" />
+              <span className="text-[var(--text-main)]">Seizoen / maandelijks</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-5 border-t-2 border-dotted border-[#fb7185] shrink-0" />
+              <span className="text-[var(--text-main)]">Gestopt (2022–2026)</span>
+            </div>
+            <div className="text-[10px] font-mono text-[var(--text-dim)] pt-0.5">
+              Gouden rand = EXACTE_HALTE · anders KERN_CENTROID
             </div>
           </div>
         )}

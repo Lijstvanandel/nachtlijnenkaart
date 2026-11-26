@@ -3,6 +3,8 @@ import type {
   FilterState,
   LineStatus,
   NightBusLine,
+  PrivateLineStatus,
+  PrivateNightBusLine,
   SortMode,
 } from '../types/nightBus';
 
@@ -372,3 +374,108 @@ export function buildRideTimelinePoints(line: NightBusLine): {
     areaPath,
   };
 }
+
+export const PRIVATE_STATUS_META: Record<
+  PrivateLineStatus,
+  {
+    label: string;
+    shortLabel: string;
+    color: string;
+    weight: number;
+    dashArray?: string;
+  }
+> = {
+  PARTICULIER_ACTIEF: {
+    label: 'Particulier · Actief (regulier / wekelijks)',
+    shortLabel: 'PART. ACTIEF',
+    color: '#a855f7',
+    weight: 3.4,
+  },
+  PARTICULIER_SEIZOEN_MAANDELIJKS: {
+    label: 'Particulier · Seizoen / Maandelijks',
+    shortLabel: 'MAANDELIJKS',
+    color: '#22d3ee',
+    weight: 3.2,
+    dashArray: '7, 5',
+  },
+  PARTICULIER_GESTOPT_2022_2026: {
+    label: 'Particulier · Gestopt (2022–2026)',
+    shortLabel: 'PART. GESTOPT',
+    color: '#fb7185',
+    weight: 2.8,
+    dashArray: '2, 6',
+  },
+};
+
+export function getPrivatePolylineStyle(
+  line: PrivateNightBusLine,
+  isFilteredOut: boolean,
+  isSelected: boolean
+): PolylineVisualStyle {
+  const baseMeta = PRIVATE_STATUS_META[line.status];
+
+  if (isFilteredOut) {
+    return {
+      color: '#3b2454',
+      weight: 1.5,
+      opacity: 0.25,
+      dashArray: baseMeta.dashArray,
+    };
+  }
+
+  return {
+    color: isSelected ? '#fbbf24' : baseMeta.color,
+    weight: isSelected ? baseMeta.weight + 2.4 : baseMeta.weight,
+    opacity: isSelected ? 1 : line.status === 'PARTICULIER_GESTOPT_2022_2026' ? 0.78 : 0.92,
+    dashArray: baseMeta.dashArray,
+  };
+}
+
+function normalizeProvinceToken(prov: string): string {
+  const p = prov.trim().toLowerCase();
+  if (p === 'fryslân' || p === 'fryslan' || p === 'friesland') return 'friesland';
+  return p;
+}
+
+export function filterPrivateNightBusLines(
+  lines: PrivateNightBusLine[],
+  provincie: string,
+  search: string
+): PrivateNightBusLine[] {
+  const query = normalizeQuery(search);
+  const targetProv = provincie === 'ALL' ? null : normalizeProvinceToken(provincie);
+
+  return lines.filter((line) => {
+    if (
+      targetProv &&
+      !line.provincies.some((p) => normalizeProvinceToken(p) === targetProv)
+    ) {
+      return false;
+    }
+
+    if (query) {
+      const stopsText = line.stops
+        .map((s) => `${s.haltenaam} ${s.woonplaats} ${s.gemeente}`)
+        .join(' ');
+      const haystack = [
+        line.line_id,
+        line.naam_verbinding,
+        line.corridor,
+        line.vervoerder,
+        line.provincies.join(' '),
+        line.bediende_gemeenten,
+        line.frequentie,
+        line.tarief,
+        line.toelichting_en_historie,
+        line.route_verloop_wegen,
+        stopsText,
+      ]
+        .join(' ')
+        .toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
+
+    return true;
+  });
+}
+

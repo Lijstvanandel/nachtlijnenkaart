@@ -60,6 +60,8 @@ export interface NightBusLine {
   bronType: 'PRIMAIR' | 'SECUNDAIR' | 'ONDERZOEK';
   bronUrl: string;
   isSteenwijkerlandRelevant?: boolean;
+  routeVerloopWegen?: string;
+  routeWaypoints?: [number, number][];
   haltes: NightBusStop[];
 }
 
@@ -81,3 +83,42 @@ export interface FilterState {
   tarief: string;
   activeStatuses: LineStatus[];
 }
+
+export type PrivateLineStatus =
+  | 'PARTICULIER_ACTIEF'
+  | 'PARTICULIER_SEIZOEN_MAANDELIJKS'
+  | 'PARTICULIER_GESTOPT_2022_2026';
+
+export type PrivateStopAccuracy = 'EXACTE_HALTE' | 'KERN_CENTROID';
+
+export interface PrivateNightBusStop {
+  volgnr: number;
+  haltenaam: string;
+  woonplaats: string;
+  gemeente: string;
+  lat: number;
+  lon: number;
+  nauwkeurigheid: PrivateStopAccuracy;
+  tijd_heen: string | null;
+  tijd_terug: string | null;
+}
+
+export interface PrivateNightBusLine {
+  line_id: string;
+  naam_verbinding: string;
+  corridor: string;
+  status: PrivateLineStatus;
+  vervoerder: string;
+  provincies: string[];
+  bediende_gemeenten: string;
+  frequentie: string;
+  tijden_heen: string;
+  tijden_terug: string;
+  tarief: string;
+  toelichting_en_historie: string;
+  bron_url: string;
+  route_verloop_wegen: string;
+  stops: PrivateNightBusStop[];
+  route_waypoints: [number, number][];
+}
+

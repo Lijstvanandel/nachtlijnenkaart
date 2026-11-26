@@ -1,7 +1,13 @@
 import React from 'react';
-import { Filter, PanelLeftClose } from 'lucide-react';
-import type { ColorMode, FilterState, LineStatus, NightBusLine } from '../types/nightBus';
-import { STATUS_META } from '../utils/nightBusLogic';
+import { Bus, Filter, PanelLeftClose } from 'lucide-react';
+import type {
+  ColorMode,
+  FilterState,
+  LineStatus,
+  NightBusLine,
+  PrivateNightBusLine,
+} from '../types/nightBus';
+import { PRIVATE_STATUS_META, STATUS_META } from '../utils/nightBusLogic';
 
 interface FilterSidebarProps {
   isOpen: boolean;
@@ -15,6 +21,12 @@ interface FilterSidebarProps {
   allLines: NightBusLine[];
   selectedLineId: string | null;
   onSelectLine: (line: NightBusLine) => void;
+  showPrivateLines: boolean;
+  onTogglePrivateLines: (next: boolean) => void;
+  privateLinesCount: number;
+  filteredPrivateLines: PrivateNightBusLine[];
+  selectedPrivateLineId: string | null;
+  onSelectPrivateLine: (line: PrivateNightBusLine) => void;
 }
 
 const PROVINCE_OPTIONS = [
@@ -58,6 +70,12 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
   allLines,
   selectedLineId,
   onSelectLine,
+  showPrivateLines,
+  onTogglePrivateLines,
+  privateLinesCount,
+  filteredPrivateLines,
+  selectedPrivateLineId,
+  onSelectPrivateLine,
 }) => {
   const statusCounts: Record<LineStatus, number> = {
     ACTIEF: allLines.filter((l) => l.status === 'ACTIEF').length,
@@ -259,21 +277,101 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
               </label>
             );
           })}
+
+          <div className="pt-1.5">
+            <label className="flex items-center justify-between px-2 py-1.5 rounded-[4px] bg-[#a855f7]/10 hover:bg-[#a855f7]/18 border border-[#a855f7]/45 cursor-pointer text-xs">
+              <span className="flex items-center gap-2 min-w-0">
+                <input
+                  id="sidebarPrivateLayerToggle"
+                  type="checkbox"
+                  checked={showPrivateLines}
+                  onChange={(e) => onTogglePrivateLines(e.target.checked)}
+                  className="accent-[#a855f7] rounded-[2px]"
+                />
+                <Bus className="w-3.5 h-3.5 text-[#a855f7] shrink-0" />
+                <span className="text-[var(--text-main)] font-semibold truncate">
+                  Losse laag: Particuliere lijnen
+                </span>
+              </span>
+              <span className="font-mono text-[10px] font-bold text-[#c084fc] shrink-0">
+                {showPrivateLines ? `${filteredPrivateLines.length}/${privateLinesCount}` : `${privateLinesCount} (uit)`}
+              </span>
+            </label>
+          </div>
         </div>
       </div>
 
       {/* Lijst Header */}
-      <div className="px-3.5 py-2 bg-[var(--bg-card)] border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
-        <span id="sidebarListCounter" className="text-[11px] font-mono text-[var(--text-muted)]">
-          {filteredLines.length} / {allLines.length} nachtlijnen
+      <div className="px-3.5 py-2 bg-[var(--bg-card)] border-b border-[var(--border-subtle)] flex items-center justify-between gap-2 shrink-0">
+        <span id="sidebarListCounter" className="text-[11px] font-mono text-[var(--text-muted)] truncate">
+          {showPrivateLines
+            ? `${filteredLines.length} OV + ${filteredPrivateLines.length} part.`
+            : `${filteredLines.length} / ${allLines.length} nachtlijnen`}
         </span>
-        <span className="text-[10px] font-mono uppercase text-[var(--text-dim)]">
+        <span className="text-[10px] font-mono uppercase text-[var(--text-dim)] whitespace-nowrap shrink-0">
           Klik lijn voor dossier
         </span>
       </div>
 
       {/* Klikbare lijnenlijst */}
       <div id="sidebarLineList" className="flex-1 overflow-y-auto p-2.5 space-y-1.5 bg-[var(--bg-main)]/50">
+        {showPrivateLines && (
+          <div className="space-y-1.5 pb-2 mb-2 border-b border-[var(--border-subtle)]">
+            <div className="px-1 flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-[#c084fc]">
+              <span>Particuliere nachtlijnen ({filteredPrivateLines.length})</span>
+              <span>Buiten concessie</span>
+            </div>
+            {filteredPrivateLines.length === 0 ? (
+              <div className="p-2.5 rounded-[4px] bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[11px] text-[var(--text-dim)]">
+                Geen particuliere lijnen voor deze provincie/zoekterm.
+              </div>
+            ) : (
+              filteredPrivateLines.map((pline) => {
+                const pmeta = PRIVATE_STATUS_META[pline.status];
+                const isPSel = selectedPrivateLineId === pline.line_id;
+                return (
+                  <button
+                    key={pline.line_id}
+                    type="button"
+                    onClick={() => onSelectPrivateLine(pline)}
+                    className={`w-full text-left p-2.5 rounded-[4px] border transition cursor-pointer ${
+                      isPSel
+                        ? 'border-[#fbbf24] bg-[var(--bg-elevated)]'
+                        : 'border-[#a855f7]/40 bg-[var(--bg-card)] hover:bg-[var(--bg-card-hover)]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="px-1.5 py-0.5 rounded-[3px] font-mono text-[9px] font-extrabold bg-[#a855f7]/25 text-[#d8b4fe] border border-[#a855f7]/50 shrink-0">
+                          PART
+                        </span>
+                        <span className="text-xs font-bold text-[var(--text-main)] truncate">
+                          {pline.naam_verbinding}
+                        </span>
+                      </div>
+                      <span
+                        className="px-1.5 py-0.5 rounded-[3px] font-mono text-[9px] font-bold shrink-0"
+                        style={{
+                          backgroundColor: `${pmeta.color}20`,
+                          color: pmeta.color,
+                        }}
+                      >
+                        {pmeta.shortLabel}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-[10px] font-mono text-[var(--text-muted)] gap-2">
+                      <span className="truncate">
+                        {pline.vervoerder} · {pline.provincies.join('/')}
+                      </span>
+                      <span className="text-[#c084fc] shrink-0">{pline.stops.length} haltes</span>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        )}
+
         {filteredLines.length === 0 ? (
           <div className="p-4 rounded-[5px] bg-[var(--bg-card)] border border-[var(--border-subtle)] text-center space-y-2">
             <div className="text-xs font-bold text-[var(--text-main)]">Geen lijnen gevonden</div>

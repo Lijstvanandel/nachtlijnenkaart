@@ -4,12 +4,15 @@ import {
   NIGHT_BUS_LINES,
   PROVINCE_CONCESSION_SUMMARIES,
 } from './data/nightBusLines';
+import { PRIVATE_NIGHT_BUS_LINES } from './data/privateNightBusLines';
 import type {
   ColorMode,
   FilterState,
   LineStatus,
   NightBusLine,
   NightBusStop,
+  PrivateNightBusLine,
+  PrivateNightBusStop,
   SortMode,
   ViewMode,
 } from './types/nightBus';
@@ -17,6 +20,7 @@ import {
   buildSemicolonCsv,
   computeNightBusStats,
   filterNightBusLines,
+  filterPrivateNightBusLines,
   sortNightBusLines,
 } from './utils/nightBusLogic';
 import { TopNavbar } from './components/TopNavbar';
@@ -79,6 +83,8 @@ export default function App() {
     !isEmbedMode && defaultDesktopOpen
   );
   const [selectedLine, setSelectedLine] = useState<NightBusLine | null>(defaultSelectedLine);
+  const [showPrivateLines, setShowPrivateLines] = useState<boolean>(false);
+  const [selectedPrivateLine, setSelectedPrivateLine] = useState<PrivateNightBusLine | null>(null);
   const [focusCommand, setFocusCommand] = useState<MapFocusCommand | null>(null);
 
   const [isStatsOpen, setIsStatsOpen] = useState(false);
@@ -129,6 +135,14 @@ export default function App() {
     return sortNightBusLines(matched, 'STATUS');
   }, [filters]);
 
+  const filteredPrivateLines = useMemo(() => {
+    return filterPrivateNightBusLines(
+      PRIVATE_NIGHT_BUS_LINES,
+      filters.provincie,
+      filters.search
+    );
+  }, [filters.provincie, filters.search]);
+
   const handleQuickFilter = useCallback(
     (mode: 'ALL' | 'ACTIEF' | 'ONDERZOEK_PILOT', statuses: LineStatus[]) => {
       setQuickFilterMode(mode);
@@ -163,6 +177,7 @@ export default function App() {
   }, [showToast]);
 
   const handleSelectLine = useCallback((line: NightBusLine, jumpToMap = false) => {
+    setSelectedPrivateLine(null);
     setSelectedLine(line);
     setIsRightDrawerOpen(true);
     if (jumpToMap) {
@@ -174,6 +189,33 @@ export default function App() {
     }
   }, []);
 
+  const handleSelectPrivateLine = useCallback((line: PrivateNightBusLine) => {
+    setSelectedLine(null);
+    setSelectedPrivateLine(line);
+    setIsRightDrawerOpen(true);
+    setViewMode('map');
+    setFocusCommand({ type: 'privateLine', line, nonce: Date.now() });
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setIsLeftSidebarOpen(false);
+    }
+  }, []);
+
+  const handleTogglePrivateLines = useCallback(
+    (next: boolean) => {
+      setShowPrivateLines(next);
+      if (!next && selectedPrivateLine) {
+        setSelectedPrivateLine(null);
+        setSelectedLine(defaultSelectedLine);
+      }
+      showToast(
+        next
+          ? `Particuliere laag geactiveerd (${PRIVATE_NIGHT_BUS_LINES.length} lijnen buiten OV-concessies).`
+          : 'Particuliere nachtlijnen-laag gedeactiveerd.'
+      );
+    },
+    [defaultSelectedLine, selectedPrivateLine, showToast]
+  );
+
   const handleFocusStop = useCallback(
     (stop: NightBusStop) => {
       if (!selectedLine) return;
@@ -184,11 +226,27 @@ export default function App() {
     [selectedLine, showToast]
   );
 
+  const handleFocusPrivateStop = useCallback(
+    (stop: PrivateNightBusStop) => {
+      if (!selectedPrivateLine) return;
+      setViewMode('map');
+      setFocusCommand({
+        type: 'privateStop',
+        stop,
+        line: selectedPrivateLine,
+        nonce: Date.now(),
+      });
+      showToast(`Haltefocus (particulier): ${stop.haltenaam}`);
+    },
+    [selectedPrivateLine, showToast]
+  );
+
   const handleFocusGm1708 = useCallback(() => {
     setViewMode('map');
     setFocusCommand({ type: 'gm1708', nonce: Date.now() });
     const line426 = NIGHT_BUS_LINES.find((l) => l.line_id === 'GD-OV-ONDERZOEK-426');
     if (line426) {
+      setSelectedPrivateLine(null);
       setSelectedLine(line426);
       setIsRightDrawerOpen(true);
     }
@@ -280,6 +338,12 @@ export default function App() {
           allLines={NIGHT_BUS_LINES}
           selectedLineId={selectedLine?.line_id || null}
           onSelectLine={(line) => handleSelectLine(line, false)}
+          showPrivateLines={showPrivateLines}
+          onTogglePrivateLines={handleTogglePrivateLines}
+          privateLinesCount={PRIVATE_NIGHT_BUS_LINES.length}
+          filteredPrivateLines={filteredPrivateLines}
+          selectedPrivateLineId={selectedPrivateLine?.line_id || null}
+          onSelectPrivateLine={handleSelectPrivateLine}
         />
 
         <main className="flex-1 relative h-full min-w-0 bg-[var(--bg-main)]">
@@ -288,6 +352,12 @@ export default function App() {
               allLines={NIGHT_BUS_LINES}
               filteredLines={filteredLines}
               selectedLine={selectedLine}
+              privateLines={PRIVATE_NIGHT_BUS_LINES}
+              filteredPrivateLines={filteredPrivateLines}
+              showPrivateLines={showPrivateLines}
+              onTogglePrivateLines={handleTogglePrivateLines}
+              selectedPrivateLine={selectedPrivateLine}
+              onSelectPrivateLine={handleSelectPrivateLine}
               colorMode={colorMode}
               focusCommand={focusCommand}
               onSelectLine={(line) => handleSelectLine(line, false)}
@@ -316,9 +386,11 @@ export default function App() {
 
         <DetailDrawer
           line={selectedLine}
+          privateLine={selectedPrivateLine}
           isOpen={isRightDrawerOpen}
           onClose={() => setIsRightDrawerOpen(false)}
           onFocusStop={handleFocusStop}
+          onFocusPrivateStop={handleFocusPrivateStop}
         />
       </div>
 
@@ -362,6 +434,14 @@ export default function App() {
         isOpen={isStatsOpen}
         onClose={() => setIsStatsOpen(false)}
         allLines={NIGHT_BUS_LINES}
+        privateLines={PRIVATE_NIGHT_BUS_LINES}
+        showPrivateLines={showPrivateLines}
+        onActivatePrivateLines={() => {
+          setViewMode('map');
+          if (!showPrivateLines) {
+            handleTogglePrivateLines(true);
+          }
+        }}
         provinceSummaries={PROVINCE_CONCESSION_SUMMARIES}
         onFilterStatuses={(statuses) => {
           setFilters({ ...DEFAULT_FILTERS, activeStatuses: statuses });
@@ -380,6 +460,7 @@ export default function App() {
         isOpen={isEmbedOpen}
         onClose={() => setIsEmbedOpen(false)}
         allLines={NIGHT_BUS_LINES}
+        privateLines={PRIVATE_NIGHT_BUS_LINES}
         onExportCsv={handleExportCsv}
       />
     </div>

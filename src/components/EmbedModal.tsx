@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Check, Code2, Copy, Download, ExternalLink, X } from 'lucide-react';
-import type { NightBusLine } from '../types/nightBus';
+import type { NightBusLine, PrivateNightBusLine } from '../types/nightBus';
 
 interface EmbedModalProps {
   isOpen: boolean;
   onClose: () => void;
   allLines: NightBusLine[];
+  privateLines: PrivateNightBusLine[];
   onExportCsv: () => void;
 }
 
@@ -13,6 +14,7 @@ export const EmbedModal: React.FC<EmbedModalProps> = ({
   isOpen,
   onClose,
   allLines,
+  privateLines,
   onExportCsv,
 }) => {
   const [copied, setCopied] = useState(false);
@@ -73,6 +75,45 @@ export const EmbedModal: React.FC<EmbedModalProps> = ({
     const a = document.createElement('a');
     a.href = url;
     a.download = 'nachtstreeklijnen_nederland_2026_11_26.geojson';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportPrivateGeoJson = () => {
+    const features = privateLines.map((line) => ({
+      type: 'Feature',
+      properties: {
+        line_id: line.line_id,
+        naam_verbinding: line.naam_verbinding,
+        corridor: line.corridor,
+        status: line.status,
+        vervoerder: line.vervoerder,
+        provincies: line.provincies,
+        bediende_gemeenten: line.bediende_gemeenten,
+        frequentie: line.frequentie,
+        tarief: line.tarief,
+      },
+      geometry: {
+        type: 'LineString',
+        coordinates: line.route_waypoints.map(([lat, lon]) => [lon, lat]),
+      },
+    }));
+
+    const geojson = {
+      type: 'FeatureCollection',
+      name: 'Particuliere_Nachtbussen_Nederland_2026_11_27',
+      features,
+    };
+
+    const blob = new Blob([JSON.stringify(geojson, null, 2)], {
+      type: 'application/geo+json;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'particuliere_nachtbussen_nederland_2026_11_27.geojson';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -161,7 +202,16 @@ export const EmbedModal: React.FC<EmbedModalProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] bg-[var(--bg-elevated)] hover:bg-[var(--bg-card-hover)] text-[var(--status-emerald)] border border-[var(--border-subtle)] font-mono text-[11px] font-semibold cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Download GeoJSON ({allLines.length})</span>
+              <span>Download OV GeoJSON ({allLines.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportPrivateGeoJson}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] bg-[var(--bg-elevated)] hover:bg-[var(--bg-card-hover)] text-[#c084fc] border border-[#a855f7]/50 font-mono text-[11px] font-semibold cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Particulier GeoJSON ({privateLines.length})</span>
             </button>
 
             <button

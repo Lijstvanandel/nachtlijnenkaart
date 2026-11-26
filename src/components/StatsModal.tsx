@@ -1,12 +1,20 @@
 import React from 'react';
 import { BarChart3, X } from 'lucide-react';
-import type { LineStatus, NightBusLine, ProvinceConcessionSummary } from '../types/nightBus';
+import type {
+  LineStatus,
+  NightBusLine,
+  PrivateNightBusLine,
+  ProvinceConcessionSummary,
+} from '../types/nightBus';
 import { computeNightBusStats } from '../utils/nightBusLogic';
 
 interface StatsModalProps {
   isOpen: boolean;
   onClose: () => void;
   allLines: NightBusLine[];
+  privateLines: PrivateNightBusLine[];
+  showPrivateLines: boolean;
+  onActivatePrivateLines: () => void;
   provinceSummaries: ProvinceConcessionSummary[];
   onFilterStatuses: (statuses: LineStatus[]) => void;
   onFilterProvince: (province: string) => void;
@@ -16,11 +24,22 @@ export const StatsModal: React.FC<StatsModalProps> = ({
   isOpen,
   onClose,
   allLines,
+  privateLines,
+  showPrivateLines,
+  onActivatePrivateLines,
   provinceSummaries,
   onFilterStatuses,
   onFilterProvince,
 }) => {
   if (!isOpen) return null;
+
+  const privateActief = privateLines.filter((l) => l.status === 'PARTICULIER_ACTIEF').length;
+  const privateSeizoen = privateLines.filter(
+    (l) => l.status === 'PARTICULIER_SEIZOEN_MAANDELIJKS'
+  ).length;
+  const privateGestopt = privateLines.filter(
+    (l) => l.status === 'PARTICULIER_GESTOPT_2022_2026'
+  ).length;
 
   const stats = computeNightBusStats(allLines);
   const pct = (part: number, total: number) =>
@@ -77,7 +96,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({
                 <div className="text-2xl font-bold font-mono text-[#38bdf8] mt-1">
                   {stats.activePrimaryOutsideRetHwgo}{' '}
                   <span className="text-xs font-normal text-[var(--text-muted)]">
-                    streek (+13 RET BOB)
+                    streek (+13 RET N1–N19)
                   </span>
                 </div>
                 <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
@@ -368,12 +387,44 @@ export const StatsModal: React.FC<StatsModalProps> = ({
                 Databronnen, CHB/NDOV &amp; Kwaliteitsborging
               </h3>
               <p className="text-[11px] text-[var(--text-muted)]">
-                Routegeometrie en passagetijden zijn ontsloten uit geverifieerde concessie-overzichten en NDOV/CHB-haltecodes (o.a.{' '}
+                Routegeometrie en passagetijden zijn ontsloten uit geverifieerde concessie-overzichten, wegcorridors en NDOV/CHB-haltecodes (o.a.{' '}
                 <code className="font-mono text-[var(--status-blue)]">NL:S:16530020</code> Dieverbrug Busstation,{' '}
-                <code className="font-mono text-[var(--status-blue)]">NL:Q:57332107</code> Dieverbrug Rijksweg en{' '}
+                <code className="font-mono text-[var(--status-blue)]">NL:S:15000120</code> Assen Beilerstraat,{' '}
+                <code className="font-mono text-[var(--status-blue)]">NL:Q:57332107</code> Schiphol Plaza en{' '}
                 <code className="font-mono text-[var(--status-blue)]">3800155</code> Steenwijk Station). Verouderde acceptatie-URL’s (<code className="font-mono text-[#fbbf24]">acc.busgd.nl</code>) en vervallen pilots zijn expliciet gelabeld.
               </p>
             </div>
+          </div>
+
+          {/* Losse laag: Particuliere nachtbussen */}
+          <div className="bg-[var(--bg-main)] border border-[#a855f7]/45 rounded-[5px] p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="px-1.5 py-0.5 rounded-[3px] bg-[#a855f7]/25 text-[#d8b4fe] border border-[#a855f7]/50 font-mono text-[10px] font-bold">
+                  LOSSE KAARTLAAG · PEILDATUM 27 NOV. 2026
+                </span>
+                <span className="text-xs font-bold text-[var(--text-main)]">
+                  Particuliere nachtbussen buiten OV-concessies ({privateLines.length} lijnen)
+                </span>
+              </div>
+              <p className="text-[11px] text-[var(--text-muted)]">
+                Bevat {privateActief} regulier actieve ({' '}
+                <strong>De Borrelbus</strong> incl. Steenwijkerland GM1708, Bruins Combiroute, 2× Venlo),{' '}
+                {privateSeizoen} maandelijkse/seizoenslijnen (Flevo Night Express, Lemster Late Night Liner) en{' '}
+                {privateGestopt} gestopte trajecten (2022–2026). Standaard gedeactiveerd op de kaart.
+              </p>
+            </div>
+            <button
+              id="activatePrivateLayerFromStatsBtn"
+              type="button"
+              onClick={() => {
+                onActivatePrivateLines();
+                onClose();
+              }}
+              className="px-3 py-2 rounded-[4px] bg-[#a855f7]/20 hover:bg-[#a855f7]/35 text-[#e9d5ff] border border-[#a855f7]/60 font-mono text-[11px] font-bold whitespace-nowrap cursor-pointer shrink-0"
+            >
+              {showPrivateLines ? 'Particuliere laag bekijken →' : 'Activeer particuliere kaartlaag →'}
+            </button>
           </div>
         </div>
       </div>

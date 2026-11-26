@@ -268,7 +268,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               26 NOV 2026
             </span>
             <span className="text-[var(--text-dim)]">·</span>
-            <span className="text-[var(--status-blue)]">58 STREEK + 13 RET BOB</span>
+            <span className="text-[var(--status-blue)]">58 STREEK + 13 RET N1–N19</span>
             <span className="text-[var(--text-dim)]">·</span>
             <span className="text-[var(--accent-gold)]">{researchAndPilotCount} ONDERZOEK</span>
             <span className="text-[var(--text-dim)]">·</span>

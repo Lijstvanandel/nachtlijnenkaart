@@ -1,21 +1,218 @@
 import React from 'react';
-import { ExternalLink, FileSearch, MapPin, X } from 'lucide-react';
-import type { NightBusLine, NightBusStop } from '../types/nightBus';
-import { buildRideTimelinePoints, STATUS_META } from '../utils/nightBusLogic';
+import { ExternalLink, FileSearch, MapPin, Route, X } from 'lucide-react';
+import type {
+  NightBusLine,
+  NightBusStop,
+  PrivateNightBusLine,
+  PrivateNightBusStop,
+} from '../types/nightBus';
+import {
+  buildRideTimelinePoints,
+  PRIVATE_STATUS_META,
+  STATUS_META,
+} from '../utils/nightBusLogic';
 
 interface DetailDrawerProps {
   line: NightBusLine | null;
+  privateLine: PrivateNightBusLine | null;
   isOpen: boolean;
   onClose: () => void;
   onFocusStop: (stop: NightBusStop) => void;
+  onFocusPrivateStop: (stop: PrivateNightBusStop) => void;
 }
 
 export const DetailDrawer: React.FC<DetailDrawerProps> = ({
   line,
+  privateLine,
   isOpen,
   onClose,
   onFocusStop,
+  onFocusPrivateStop,
 }) => {
+  if (!line && !privateLine) return null;
+
+  if (privateLine) {
+    const pMeta = PRIVATE_STATUS_META[privateLine.status];
+    const exactStopsCount = privateLine.stops.filter(
+      (s) => s.nauwkeurigheid === 'EXACTE_HALTE'
+    ).length;
+
+    return (
+      <aside
+        id="rightDetailDrawer"
+        aria-label="Particulier lijndossier en haltereeks"
+        className={`fixed lg:static inset-y-0 right-0 z-40 w-[90vw] max-w-[360px] xl:max-w-[380px] bg-[var(--bg-card)] border-l border-[var(--border-subtle)] flex flex-col shrink-0 transition-transform duration-200 ${
+          isOpen ? 'translate-x-0 lg:flex' : 'translate-x-full lg:hidden'
+        }`}
+      >
+        <div className="px-3.5 py-2.5 bg-[var(--bg-elevated)] border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <FileSearch className="w-3.5 h-3.5 text-[#a855f7]" />
+            <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
+              Particulier Lijndossier (27 nov. 2026)
+            </h2>
+          </div>
+          <button
+            id="closeRightDrawerBtn"
+            type="button"
+            onClick={onClose}
+            aria-label="Sluit detailpaneel"
+            title="Sluit detailpaneel"
+            className="p-1 rounded-[4px] text-[var(--text-muted)] hover:text-[var(--status-crimson)] hover:bg-[var(--bg-card-hover)] cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-[5px] p-3">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <span
+                className="px-2 py-0.5 rounded-[3px] border font-mono text-[10px] font-bold"
+                style={{
+                  backgroundColor: `${pMeta.color}20`,
+                  color: pMeta.color,
+                  borderColor: `${pMeta.color}66`,
+                }}
+              >
+                {privateLine.status}
+              </span>
+              <span className="font-mono text-[10px] text-[var(--text-dim)]">
+                {privateLine.line_id}
+              </span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="px-1.5 py-0.5 rounded-[3px] bg-[#a855f7] text-[#060e0a] font-mono text-[11px] font-extrabold whitespace-nowrap shrink-0 mt-0.5">
+                PARTICULIER
+              </span>
+              <h3 className="text-[15px] font-extrabold text-[var(--text-main)] leading-snug">
+                {privateLine.naam_verbinding}
+              </h3>
+            </div>
+            <div className="text-xs text-[var(--text-main)] mt-1.5">{privateLine.corridor}</div>
+            <div className="text-[11px] font-mono text-[var(--text-muted)] mt-1">
+              {privateLine.provincies.join(' / ')} · {privateLine.bediende_gemeenten}
+            </div>
+            <div className="text-[11px] font-mono text-[var(--text-dim)] mt-0.5">
+              Vervoerder: <span className="text-[var(--text-main)]">{privateLine.vervoerder}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-[5px] p-2.5 col-span-2">
+              <div className="text-[10px] font-mono uppercase text-[var(--text-dim)]">
+                Frequentie &amp; Exploitatie
+              </div>
+              <div className="text-xs font-semibold text-[var(--text-main)] mt-0.5">
+                {privateLine.frequentie}
+              </div>
+            </div>
+            <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-[5px] p-2.5">
+              <div className="text-[10px] font-mono uppercase text-[var(--text-dim)]">Heenrit</div>
+              <div className="text-[11px] font-mono text-[#fbbf24] mt-0.5">
+                {privateLine.tijden_heen}
+              </div>
+            </div>
+            <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-[5px] p-2.5">
+              <div className="text-[10px] font-mono uppercase text-[var(--text-dim)]">Terugrit</div>
+              <div className="text-[11px] font-mono text-[#22d3ee] mt-0.5">
+                {privateLine.tijden_terug}
+              </div>
+            </div>
+            <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-[5px] p-2.5 col-span-2">
+              <div className="text-[10px] font-mono uppercase text-[var(--text-dim)]">Tarief</div>
+              <div className="text-xs font-bold font-mono text-[var(--accent-gold)] mt-0.5">
+                {privateLine.tarief}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-[5px] p-3 space-y-2">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-1.5">
+              <Route className="w-3 h-3 text-[#a855f7]" />
+              <span>Wegennet-routering &amp; Dossier</span>
+            </div>
+            <p className="text-[11px] font-mono text-[var(--text-main)] leading-relaxed">
+              {privateLine.route_verloop_wegen}
+            </p>
+            <p className="text-[11px] text-[var(--text-muted)] leading-relaxed border-t border-[var(--border-subtle)] pt-2">
+              {privateLine.toelichting_en_historie}
+            </p>
+
+            {privateLine.bron_url && (
+              <a
+                href={privateLine.bron_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-[4px] bg-[var(--bg-elevated)] hover:bg-[var(--bg-card-hover)] text-[var(--text-main)] border border-[var(--border-focus)] font-mono text-[11px] font-semibold transition"
+              >
+                <span>Open bronvermelding</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+
+          <div className="bg-[var(--bg-main)] border border-[var(--border-subtle)] rounded-[5px] p-3 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                Haltereeks ({privateLine.stops.length} haltes · {exactStopsCount} exact)
+              </span>
+              <span className="text-[10px] font-mono text-[var(--text-dim)]">Klik halte → zoom</span>
+            </div>
+
+            <div className="relative pl-4 border-l border-[var(--border-focus)] space-y-2.5">
+              {privateLine.stops.map((stop) => {
+                const isExact = stop.nauwkeurigheid === 'EXACTE_HALTE';
+                return (
+                  <button
+                    key={`${stop.volgnr}-${stop.haltenaam}`}
+                    type="button"
+                    onClick={() => onFocusPrivateStop(stop)}
+                    className="w-full text-left group relative block rounded-[4px] p-1.5 -ml-1.5 hover:bg-[var(--bg-card-hover)] transition cursor-pointer"
+                  >
+                    <span
+                      className="w-2.5 h-2.5 rounded-[2px] absolute -left-[15.5px] top-2.5 border"
+                      style={{
+                        backgroundColor: isExact ? '#fbbf24' : pMeta.color,
+                        borderColor: isExact ? '#fef3c7' : '#060e0a',
+                      }}
+                    />
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-[var(--text-main)] group-hover:text-[var(--accent-gold-bright)] truncate">
+                        {stop.volgnr}. {stop.haltenaam}
+                      </span>
+                      <span
+                        className={`px-1 py-0.5 rounded-[2px] font-mono text-[9px] font-bold shrink-0 ${
+                          isExact
+                            ? 'bg-[#f59e0b]/20 text-[#fbbf24] border border-[#f59e0b]/40'
+                            : 'bg-[var(--bg-elevated)] text-[var(--text-dim)] border border-[var(--border-subtle)]'
+                        }`}
+                      >
+                        {stop.nauwkeurigheid}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-0.5 text-[10px] font-mono text-[var(--text-dim)]">
+                      <span>
+                        {stop.woonplaats} ({stop.gemeente}) · {stop.lat.toFixed(4)}, {stop.lon.toFixed(4)}
+                      </span>
+                    </div>
+                    {(stop.tijd_heen || stop.tijd_terug) && (
+                      <div className="mt-0.5 text-[10px] font-mono text-[#fbbf24]">
+                        {stop.tijd_heen ? `Heen: ${stop.tijd_heen}` : ''}
+                        {stop.tijd_heen && stop.tijd_terug ? ' · ' : ''}
+                        {stop.tijd_terug ? `Terug: ${stop.tijd_terug}` : ''}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </aside>
+    );
+  }
+
   if (!line) return null;
 
   const meta = STATUS_META[line.status];
@@ -137,6 +334,12 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({
             ))}
           </div>
           <p className="text-xs text-[var(--text-main)] leading-relaxed">{line.bekende_tijden}</p>
+          {line.routeVerloopWegen && (
+            <div className="flex items-start gap-1.5 text-[11px] font-mono text-[#38bdf8] bg-[var(--bg-elevated)]/70 border border-[var(--border-subtle)] rounded-[4px] px-2 py-1.5">
+              <Route className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>Corridor / wegennet: {line.routeVerloopWegen}</span>
+            </div>
+          )}
           <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">{line.bijzonderheden}</p>
 
           {line.verificatieOpmerking && (
